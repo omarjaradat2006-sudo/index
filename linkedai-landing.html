@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LinkedAI — Smart LinkedIn Outreach</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #07070f;
+      --surface: #0f0f1c;
+      --card:    #13131f;
+      --border:  #1e1e30;
+      --accent:  #5b52ff;
+      --accent2: #8b85ff;
+      --gold:    #f5c842;
+      --green:   #00e5a0;
+      --text:    #eeeef8;
+      --muted:   #7777aa;
+      --radius:  14px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 48px;
+      background: rgba(7,7,15,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Syne', sans-serif; font-weight: 800; font-size: 18px;
+    }
+    .nav-logo-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), #9b8fff);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 800; color: #fff;
+    }
+    .nav-cta {
+      background: var(--accent); color: #fff;
+      padding: 9px 20px; border-radius: 10px;
+      text-decoration: none;
+      font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px;
+      transition: background 0.15s, transform 0.15s;
+    }
+    .nav-cta:hover { background: #6e66ff; transform: translateY(-1px); }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center;
+      padding: 120px 24px 80px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; top: -40%; left: 50%; transform: translateX(-50%);
+      width: 900px; height: 700px;
+      background: radial-gradient(ellipse at center, rgba(91,82,255,0.18) 0%, transparent 65%);
+      pointer-events: none;
+    }
+
+    .hero-eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(91,82,255,0.12); border: 1px solid rgba(91,82,255,0.3);
+      color: var(--accent2); border-radius: 100px;
+      padding: 6px 14px; font-size: 12px; font-weight: 500;
+      letter-spacing: 0.5px; text-transform: uppercase;
+      margin-bottom: 28px;
+    }
+    .hero-eyebrow span { width: 6px; height: 6px; border-radius: 50%; background: var(--green); display: inline-block; animation: pulse 2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    .hero h1 {
+      font-family: 'Syne', sans-serif; font-weight: 800;
+      font-size: clamp(42px, 7vw, 82px);
+      line-height: 1.05; letter-spacing: -2px;
+      margin-bottom: 24px;
+      max-width: 900px;
+    }
+    .hero h1 em { font-style: normal; color: var(--accent2); }
+
+    .hero-sub {
+      font-size: clamp(16px, 2vw, 20px);
+      color: var(--muted); max-width: 560px;
+      font-weight: 300; line-height: 1.65;
+      margin-bottom: 44px;
+    }
+
+    .hero-actions {
+      display: flex; gap: 14px; justify-content: center;
+      flex-wrap: wrap; margin-bottom: 60px;
+    }
+    .btn-primary {
+      background: var(--accent); color: #fff;
+      padding: 15px 32px; border-radius: 12px;
+      text-decoration: none;
+      font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px;
+      display: inline-flex; align-items: center; gap: 8px;
+      transition: all 0.15s; box-shadow: 0 0 40px rgba(91,82,255,0.3);
+    }
+    .btn-primary:hover { background: #6e66ff; transform: translateY(-2px); box-shadow: 0 0 60px rgba(91,82,255,0.45); }
+    .btn-ghost {
+      background: transparent; color: var(--text);
+      padding: 15px 28px; border-radius: 12px;
+      border: 1px solid var(--border);
+      text-decoration: none;
+      font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px;
+      transition: all 0.15s;
+    }
+    .btn-ghost:hover { border-color: var(--accent2); color: var(--accent2); }
+
+    .hero-social-proof {
+      display: flex; align-items: center; gap: 10px;
+      color: var(--muted); font-size: 13px;
+    }
+    .star { color: var(--gold); letter-spacing: -1px; }
+
+    /* ── EXTENSION MOCKUP ── */
+    .mockup-wrapper {
+      width: 100%; max-width: 880px; margin: 0 auto;
+      padding: 0 24px;
+      position: relative;
+    }
+    .mockup-glow {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 600px; height: 300px;
+      background: radial-gradient(ellipse, rgba(91,82,255,0.2) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .mockup {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 40px 120px rgba(0,0,0,0.6);
+    }
+    .mockup-bar {
+      background: var(--surface);
+      padding: 12px 16px;
+      display: flex; align-items: center; gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .mockup-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .mockup-bar-url {
+      flex: 1; background: var(--bg); border-radius: 6px;
+      padding: 4px 12px; font-size: 11px; color: var(--muted);
+      margin: 0 8px;
+    }
+    .mockup-body {
+      display: grid; grid-template-columns: 1fr 380px;
+      min-height: 380px;
+    }
+    .mockup-linkedin {
+      padding: 28px; border-right: 1px solid var(--border);
+      background: #f3f2ef;
+    }
+    .linkedin-profile {
+      background: white; border-radius: 12px; overflow: hidden;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+    }
+    .linkedin-cover { height: 70px; background: linear-gradient(135deg, #0a66c2, #004182); }
+    .linkedin-info { padding: 12px 16px 16px; }
+    .linkedin-avatar {
+      width: 52px; height: 52px; border-radius: 50%;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border: 3px solid white; margin-top: -28px; margin-bottom: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; color: white; font-size: 16px;
+    }
+    .linkedin-name { font-weight: 700; font-size: 14px; color: #1a1a1a; margin-bottom: 2px; }
+    .linkedin-headline { font-size: 11px; color: #666; line-height: 1.4; margin-bottom: 6px; }
+    .linkedin-meta { font-size: 10px; color: #888; }
+
+    .mockup-popup {
+      padding: 0;
+      display: flex; flex-direction: column;
+    }
+    .popup-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface);
+    }
+    .popup-logo-icon {
+      width: 24px; height: 24px; border-radius: 6px;
+      background: linear-gradient(135deg, var(--accent), #9b8fff);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 800; color: #fff;
+    }
+    .popup-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 12px; }
+    .popup-subtitle { font-size: 9px; color: var(--muted); }
+    .pro-badge { margin-left: auto; background: rgba(245,200,66,0.1); color: var(--gold); border: 1px solid rgba(245,200,66,0.3); border-radius: 20px; padding: 2px 8px; font-size: 9px; font-weight: 700; }
+
+    .popup-body { padding: 12px 14px; flex: 1; }
+    .popup-profile-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px; margin-bottom: 10px;
+    }
+    .popup-pname { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 12px; margin-bottom: 2px; }
+    .popup-phead { font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+    .popup-summary { font-size: 10px; color: #aaa; line-height: 1.5; border-top: 1px solid var(--border); padding-top: 6px; }
+
+    .popup-msgs-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; font-weight: 500; }
+    .popup-msg {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; margin-bottom: 6px; overflow: hidden;
+    }
+    .popup-msg-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 5px 8px; background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid var(--border);
+    }
+    .tone-tag { font-size: 8px; font-weight: 700; font-family: 'Syne', sans-serif; padding: 2px 7px; border-radius: 20px; text-transform: uppercase; }
+    .tone-pro { background: rgba(91,82,255,0.2); color: #9b8fff; }
+    .tone-friendly { background: rgba(0,229,160,0.12); color: var(--green); }
+    .tone-direct { background: rgba(245,200,66,0.1); color: var(--gold); }
+    .copy-tag { font-size: 8px; color: var(--muted); }
+    .popup-msg-text { padding: 6px 8px; font-size: 9px; color: #bbb; line-height: 1.5; }
+
+    /* ── HOW IT WORKS ── */
+    .section { padding: 100px 24px; }
+    .section-center { text-align: center; }
+    .section-eyebrow {
+      font-size: 11px; font-weight: 600; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--accent2);
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-family: 'Syne', sans-serif; font-weight: 800;
+      font-size: clamp(30px, 4vw, 48px); letter-spacing: -1px;
+      margin-bottom: 16px; line-height: 1.1;
+    }
+    .section-sub { color: var(--muted); max-width: 520px; margin: 0 auto 60px; font-size: 17px; font-weight: 300; }
+
+    .steps {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 2px; max-width: 900px; margin: 0 auto;
+    }
+    .step {
+      background: var(--card); padding: 36px 30px;
+      position: relative;
+    }
+    .step:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+    .step:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+    .step-num {
+      font-family: 'Syne', sans-serif; font-weight: 800;
+      font-size: 56px; color: var(--border);
+      line-height: 1; margin-bottom: 20px;
+    }
+    .step-icon { font-size: 28px; margin-bottom: 14px; display: block; }
+    .step h3 { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 18px; margin-bottom: 10px; }
+    .step p { color: var(--muted); font-size: 14px; line-height: 1.7; font-weight: 300; }
+    .step-connector {
+      position: absolute; right: -14px; top: 50%;
+      transform: translateY(-50%); z-index: 1;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--accent); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+    }
+
+    /* ── FEATURES ── */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr);
+      gap: 1px; max-width: 900px; margin: 0 auto;
+      background: var(--border); border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .feature {
+      background: var(--card); padding: 40px 36px;
+    }
+    .feature-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; margin-bottom: 18px;
+    }
+    .feature h3 { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 19px; margin-bottom: 10px; }
+    .feature p { color: var(--muted); font-size: 14px; line-height: 1.7; font-weight: 300; }
+    .feature-tag {
+      display: inline-block; margin-top: 14px;
+      font-size: 11px; font-weight: 600; padding: 3px 10px;
+      border-radius: 20px; font-family: 'Syne', sans-serif;
+    }
+
+    /* ── PRICING ── */
+    .pricing-cards {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 20px; max-width: 700px; margin: 0 auto;
+    }
+    .pricing-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 36px;
+    }
+    .pricing-card.featured {
+      border-color: var(--accent);
+      background: linear-gradient(145deg, rgba(91,82,255,0.08), var(--card));
+      position: relative;
+    }
+    .featured-badge {
+      position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+      background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
+      font-family: 'Syne', sans-serif; padding: 4px 14px; border-radius: 20px;
+      text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;
+    }
+    .pricing-plan { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+    .pricing-price {
+      font-family: 'Syne', sans-serif; font-weight: 800;
+      font-size: 48px; line-height: 1; margin-bottom: 4px;
+    }
+    .pricing-price span { font-size: 16px; font-weight: 400; color: var(--muted); }
+    .pricing-desc { font-size: 13px; color: var(--muted); margin-bottom: 24px; font-weight: 300; }
+    .pricing-divider { border: none; border-top: 1px solid var(--border); margin-bottom: 24px; }
+    .pricing-features { list-style: none; margin-bottom: 28px; }
+    .pricing-features li {
+      font-size: 13px; padding: 6px 0;
+      color: var(--text); display: flex; gap: 8px; align-items: flex-start;
+      font-weight: 300;
+    }
+    .pricing-features li::before { content: '✓'; color: var(--green); font-weight: 700; flex-shrink: 0; }
+    .pricing-features li.muted { color: var(--muted); }
+    .pricing-features li.muted::before { content: '·'; color: var(--border); }
+    .pricing-btn {
+      display: block; width: 100%; text-align: center;
+      padding: 13px; border-radius: 10px; text-decoration: none;
+      font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px;
+      transition: all 0.15s;
+    }
+    .pricing-btn-free { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    .pricing-btn-free:hover { border-color: var(--accent2); }
+    .pricing-btn-pro { background: var(--accent); color: #fff; }
+    .pricing-btn-pro:hover { background: #6e66ff; transform: translateY(-1px); }
+
+    /* ── TESTIMONIALS ── */
+    .testimonials { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; max-width: 960px; margin: 0 auto; }
+    .testimonial {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 28px;
+    }
+    .testimonial-stars { color: var(--gold); font-size: 13px; margin-bottom: 14px; letter-spacing: 1px; }
+    .testimonial-text { font-size: 14px; color: var(--muted); line-height: 1.7; font-weight: 300; margin-bottom: 18px; font-style: italic; }
+    .testimonial-author { display: flex; align-items: center; gap: 10px; }
+    .testimonial-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 14px; color: #fff; flex-shrink: 0;
+    }
+    .testimonial-name { font-weight: 600; font-size: 13px; }
+    .testimonial-role { font-size: 11px; color: var(--muted); }
+
+    /* ── FINAL CTA ── */
+    .final-cta {
+      padding: 120px 24px;
+      text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .final-cta::before {
+      content: '';
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      width: 700px; height: 500px;
+      background: radial-gradient(ellipse, rgba(91,82,255,0.15) 0%, transparent 65%);
+      pointer-events: none;
+    }
+    .final-cta h2 {
+      font-family: 'Syne', sans-serif; font-weight: 800;
+      font-size: clamp(32px, 5vw, 60px); letter-spacing: -1.5px;
+      margin-bottom: 20px; line-height: 1.08;
+    }
+    .final-cta p { color: var(--muted); font-size: 17px; font-weight: 300; margin-bottom: 40px; }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 48px;
+      display: flex; align-items: center; justify-content: space-between;
+      color: var(--muted); font-size: 13px;
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      nav { padding: 14px 20px; }
+      .mockup-body { grid-template-columns: 1fr; }
+      .mockup-linkedin { display: none; }
+      .steps { grid-template-columns: 1fr; }
+      .step:first-child, .step:last-child { border-radius: 0; }
+      .step:first-child { border-radius: var(--radius) var(--radius) 0 0; }
+      .step:last-child { border-radius: 0 0 var(--radius) var(--radius); }
+      .step-connector { display: none; }
+      .features-grid { grid-template-columns: 1fr; }
+      .pricing-cards { grid-template-columns: 1fr; }
+      .testimonials { grid-template-columns: 1fr; }
+      footer { flex-direction: column; gap: 12px; text-align: center; padding: 24px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">
+    <div class="nav-logo-icon">LA</div>
+    LinkedAI
+  </div>
+  <a href="https://chromewebstore.google.com/detail/linkedai-%E2%80%94-smart-linkedin/pjbdjikbmncplbhiljcdipkhoidklngp" class="nav-cta" target="_blank">Add to Chrome — Free</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">
+    <span></span> AI-Powered LinkedIn Tool
+  </div>
+  <h1>Resumes & messages<br><em>tailored to every job.</em></h1>
+  <p class="hero-sub">LinkedAI scans any LinkedIn job posting or profile and instantly generates a tailored resume, cover letter, and personalized outreach messages — specific to that company, that role, that person.</p>
+  <div class="hero-actions">
+    <a href="https://chromewebstore.google.com/detail/linkedai-%E2%80%94-smart-linkedin/pjbdjikbmncplbhiljcdipkhoidklngp" class="btn-primary" target="_blank">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+      Add to Chrome — It's Free
+    </a>
+    <a href="#how-it-works" class="btn-ghost">See how it works</a>
+  </div>
+  <div class="hero-social-proof">
+    <span class="star">★★★★★</span>
+    <span>Trusted by job seekers & sales teams</span>
+  </div>
+</section>
+
+<!-- MOCKUP -->
+<div class="mockup-wrapper">
+  <div class="mockup-glow"></div>
+  <div class="mockup">
+    <div class="mockup-bar">
+      <div class="mockup-dot" style="background:#ff5f57"></div>
+      <div class="mockup-dot" style="background:#febc2e"></div>
+      <div class="mockup-dot" style="background:#28c840"></div>
+      <div class="mockup-bar-url">linkedin.com/in/sarah-mitchell</div>
+    </div>
+    <div class="mockup-body">
+      <div class="mockup-linkedin">
+        <div class="linkedin-profile">
+          <div class="linkedin-cover"></div>
+          <div class="linkedin-info">
+            <div class="linkedin-avatar">SM</div>
+            <div class="linkedin-name">Sarah Mitchell</div>
+            <div class="linkedin-headline">VP of Sales @ Salesforce | Ex-HubSpot | Revenue Leader | Toronto</div>
+            <div class="linkedin-meta">500+ connections · Toronto, Canada</div>
+          </div>
+        </div>
+      </div>
+      <div class="mockup-popup">
+        <div class="popup-header">
+          <div class="popup-logo-icon">LA</div>
+          <div>
+            <div class="popup-title">LinkedAI</div>
+            <div class="popup-subtitle">Smart outreach, powered by AI</div>
+          </div>
+          <div class="pro-badge">PRO ⚡</div>
+        </div>
+        <div class="popup-body">
+          <div class="popup-profile-card">
+            <div class="popup-pname">Sarah Mitchell</div>
+            <div class="popup-phead">VP of Sales @ Salesforce · Toronto</div>
+            <div class="popup-summary">8-year enterprise sales leader. Drove 3x ARR growth at Salesforce. Former HubSpot top performer. Known for strategic account management and team building.</div>
+          </div>
+          <div class="popup-msgs-label">Outreach Messages</div>
+          <div class="popup-msg">
+            <div class="popup-msg-header">
+              <span class="tone-tag tone-pro">Professional</span>
+              <span class="copy-tag">📋 Copy</span>
+            </div>
+            <div class="popup-msg-text">Hi Sarah, your trajectory from HubSpot to leading enterprise sales at Salesforce is impressive — 3x ARR growth speaks for itself. I'd love to learn how you scaled through the Series C. Would you be open to a quick call?</div>
+          </div>
+          <div class="popup-msg">
+            <div class="popup-msg-header">
+              <span class="tone-tag tone-friendly">Friendly</span>
+              <span class="copy-tag">📋 Copy</span>
+            </div>
+            <div class="popup-msg-text">Hey Sarah! Love what you've built at Salesforce — growing enterprise ARR 3x is no small feat. I've been studying your approach and would love to swap notes sometime!</div>
+          </div>
+          <div class="popup-msg">
+            <div class="popup-msg-header">
+              <span class="tone-tag tone-direct">Direct</span>
+              <span class="copy-tag">📋 Copy</span>
+            </div>
+            <div class="popup-msg-text">Sarah — your Salesforce results speak for themselves. I'm building in enterprise sales and your POV would be invaluable. 15 minutes this week?</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section class="section section-center" id="how-it-works">
+  <p class="section-eyebrow">How it works</p>
+  <h2 class="section-title">Three clicks to a perfect message</h2>
+  <p class="section-sub">No prompting. No copy-pasting. Just visit a LinkedIn page and let AI do the work.</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">01</div>
+      <span class="step-icon">🌐</span>
+      <h3>Visit any LinkedIn page</h3>
+      <p>Go to any profile, job posting, or company page. LinkedAI automatically detects what you're looking at.</p>
+      <div class="step-connector">→</div>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <span class="step-icon">⚡</span>
+      <h3>Click Generate</h3>
+      <p>LinkedAI scans the full page — scrolling through sections, reading experience, skills, and job requirements.</p>
+      <div class="step-connector">→</div>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <span class="step-icon">📋</span>
+      <h3>Copy and send</h3>
+      <p>Get 3 personalized messages in different tones, or a tailored resume and cover letter. One click to copy.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="section section-center">
+  <p class="section-eyebrow">Everything you need</p>
+  <h2 class="section-title">Four tools, one extension</h2>
+  <p class="section-sub">Whether you're networking, job hunting, or recruiting — LinkedAI has you covered.</p>
+  <div class="features-grid">
+    <div class="feature">
+      <div class="feature-icon" style="background:rgba(91,82,255,0.15)">✉️</div>
+      <h3>Outreach Messages</h3>
+      <p>Visit any LinkedIn profile and get 3 personalized messages — Professional, Friendly, and Direct. AI reads their actual experience and crafts something they'll actually reply to.</p>
+      <span class="feature-tag" style="background:rgba(91,82,255,0.12);color:#9b8fff">Free & Pro</span>
+    </div>
+    <div class="feature">
+      <div class="feature-icon" style="background:rgba(0,229,160,0.1)">📄</div>
+      <h3>Tailored Resumes</h3>
+      <p>On any job posting, generate a resume matched specifically to that role. AI picks your most relevant experience, rewrites bullets with the right keywords, and downloads as PDF.</p>
+      <span class="feature-tag" style="background:rgba(0,229,160,0.1);color:var(--green)">Pro</span>
+    </div>
+    <div class="feature">
+      <div class="feature-icon" style="background:rgba(245,200,66,0.1)">📝</div>
+      <h3>Cover Letters</h3>
+      <p>A cover letter written for that exact company and role — not a template. Mentions the company by name, references specific job requirements, and sounds like a human wrote it.</p>
+      <span class="feature-tag" style="background:rgba(245,200,66,0.1);color:var(--gold)">Pro</span>
+    </div>
+    <div class="feature">
+      <div class="feature-icon" style="background:rgba(255,107,157,0.1)">🚀</div>
+      <h3>Profile Optimizer</h3>
+      <p>Get AI-rewritten versions of your headline, About section, and experience bullets — optimized to be keyword-rich and compelling to recruiters in your target field.</p>
+      <span class="feature-tag" style="background:rgba(255,107,157,0.1);color:#ff8fb3">Pro</span>
+    </div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="section section-center">
+  <p class="section-eyebrow">What people say</p>
+  <h2 class="section-title">Actually getting results</h2>
+  <p class="section-sub" style="margin-bottom:48px">From job seekers to sales teams, LinkedAI changes how people use LinkedIn.</p>
+  <div class="testimonials">
+    <div class="testimonial">
+      <div class="testimonial-stars">★★★★★</div>
+      <p class="testimonial-text">"I used LinkedAI to message 20 recruiters in one afternoon. Got 8 replies. My old reply rate was maybe 1 in 10."</p>
+      <div class="testimonial-author">
+        <div class="testimonial-avatar" style="background:linear-gradient(135deg,#667eea,#764ba2)">JK</div>
+        <div>
+          <div class="testimonial-name">James K.</div>
+          <div class="testimonial-role">Software Engineer, Toronto</div>
+        </div>
+      </div>
+    </div>
+    <div class="testimonial">
+      <div class="testimonial-stars">★★★★★</div>
+      <p class="testimonial-text">"The tailored resume feature is insane. Applied for a warehouse role, the resume actually mentioned the company name and their specific requirements."</p>
+      <div class="testimonial-author">
+        <div class="testimonial-avatar" style="background:linear-gradient(135deg,#f093fb,#f5576c)">AM</div>
+        <div>
+          <div class="testimonial-name">Aisha M.</div>
+          <div class="testimonial-role">Operations Manager</div>
+        </div>
+      </div>
+    </div>
+    <div class="testimonial">
+      <div class="testimonial-stars">★★★★★</div>
+      <p class="testimonial-text">"As a recruiter, this saves me hours every week. The Professional tone messages are exactly what I needed for outreach — personal but polished."</p>
+      <div class="testimonial-author">
+        <div class="testimonial-avatar" style="background:linear-gradient(135deg,#4facfe,#00f2fe)">RL</div>
+        <div>
+          <div class="testimonial-name">Ryan L.</div>
+          <div class="testimonial-role">Senior Recruiter</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="section section-center">
+  <p class="section-eyebrow">Pricing</p>
+  <h2 class="section-title">Start free, upgrade when ready</h2>
+  <p class="section-sub">No credit card needed to get started.</p>
+  <div class="pricing-cards">
+    <div class="pricing-card">
+      <div class="pricing-plan">Free</div>
+      <div class="pricing-price">$0</div>
+      <div class="pricing-desc">Forever free</div>
+      <hr class="pricing-divider" />
+      <ul class="pricing-features">
+        <li>3 generations per month</li>
+        <li>All 4 tools included</li>
+        <li>Copy to clipboard</li>
+        <li class="muted">PDF downloads</li>
+        <li class="muted">Unlimited generations</li>
+      </ul>
+      <a href="https://chromewebstore.google.com/detail/linkedai-%E2%80%94-smart-linkedin/pjbdjikbmncplbhiljcdipkhoidklngp" class="pricing-btn pricing-btn-free" target="_blank">Add to Chrome Free</a>
+    </div>
+    <div class="pricing-card featured">
+      <div class="featured-badge">Most Popular</div>
+      <div class="pricing-plan">Pro</div>
+      <div class="pricing-price" style="color:var(--gold)">$10<span>/month</span></div>
+      <div class="pricing-desc">Everything unlimited</div>
+      <hr class="pricing-divider" />
+      <ul class="pricing-features">
+        <li>Unlimited generations</li>
+        <li>All 4 tools included</li>
+        <li>PDF resume downloads</li>
+        <li>PDF cover letter downloads</li>
+        <li>Cancel anytime</li>
+      </ul>
+      <a href="https://buy.stripe.com/14A6oI7MT5eT5wj2iObMQ02" class="pricing-btn pricing-btn-pro" target="_blank">Get Pro — $10/month</a>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final-cta">
+  <h2>Your next job starts with<br><em style="font-style:normal;color:var(--accent2)">the right resume.</em></h2>
+  <p>LinkedAI tailors your resume and cover letter to every job posting — in seconds. Free to start.</p>
+  <a href="https://chromewebstore.google.com/detail/linkedai-%E2%80%94-smart-linkedin/pjbdjikbmncplbhiljcdipkhoidklngp" class="btn-primary" style="display:inline-flex" target="_blank">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+    Add to Chrome — It's Free
+  </a>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="nav-logo" style="font-size:15px">
+    <div class="nav-logo-icon">LA</div>
+    LinkedAI
+  </div>
+  <div style="display:flex;gap:24px">
+    <a href="https://www.notion.so/linkedai-privacy" target="_blank">Privacy Policy</a>
+    <a href="mailto:omarjaradat2006@gmail.com">Support</a>
+    <a href="https://chromewebstore.google.com/detail/linkedai-%E2%80%94-smart-linkedin/pjbdjikbmncplbhiljcdipkhoidklngp" target="_blank">Chrome Store</a>
+  </div>
+  <div>© 2026 LinkedAI. All rights reserved.</div>
+</footer>
+
+</body>
+</html>
