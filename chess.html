@@ -6,11 +6,11 @@
 <title>Chess Robot vs Stockfish</title>
 <style>
   :root {
-    --bg: #f4f1ea;
+    --bg: #eef1ee;
     --panel: #ffffff;
     --text: #1d1d1f;
     --muted: #6b6b70;
-    --border: #dedad0;
+    --border: #d3d9d4;
     --accent: #2f6f4f;
     --accent-text: #ffffff;
     --light-sq: #ebecd0;
@@ -31,6 +31,7 @@
       --accent: #4fae7d;
       --accent-text: #0e1a13;
       --code-bg: #1f2124;
+      color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
@@ -42,6 +43,7 @@
     --accent: #4fae7d;
     --accent-text: #0e1a13;
     --code-bg: #1f2124;
+    color-scheme: dark;
   }
   * { box-sizing: border-box; }
   body {
@@ -1398,11 +1400,17 @@ onmessage = function (e) {
     if (players[game.side] !== "human") step();
   };
   $("sfSkill").oninput = () => { $("skillVal").textContent = $("sfSkill").value; };
-  $("copyFen").onclick = () => navigator.clipboard && navigator.clipboard.writeText(game.fen());
+  function copyText(text, what) {
+    const done = () => setStatus(what + " copied");
+    try {
+      navigator.clipboard.writeText(text).then(done, () => setStatus(what + ": " + text));
+    } catch (e) { setStatus(what + ": " + text); }
+  }
+  $("copyFen").onclick = () => copyText(game.fen(), "FEN");
   $("copyPgn").onclick = () => {
     let pgn = `[White "${playerName(players[0])}"]\n[Black "${playerName(players[1])}"]\n\n`;
     for (let i = 0; i < sanMoves.length; i++) pgn += (i % 2 === 0 ? (i / 2 + 1) + ". " : "") + sanMoves[i] + " ";
-    navigator.clipboard && navigator.clipboard.writeText(pgn.trim());
+    copyText(pgn.trim(), "PGN");
   };
 
   // Expose for debugging / tests.
