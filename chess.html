@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chess Robot vs Stockfish</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --panel: #ffffff;
+    --text: #1d1d1f;
+    --muted: #6b6b70;
+    --border: #dedad0;
+    --accent: #2f6f4f;
+    --accent-text: #ffffff;
+    --light-sq: #ebecd0;
+    --dark-sq: #739552;
+    --last-move: rgba(255, 215, 0, 0.45);
+    --selected: rgba(20, 85, 30, 0.55);
+    --check: rgba(220, 40, 40, 0.75);
+    --hint: rgba(40, 120, 220, 0.55);
+    --code-bg: #f6f6f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1b1c1e;
+      --panel: #26282b;
+      --text: #ececec;
+      --muted: #a0a0a6;
+      --border: #3a3d42;
+      --accent: #4fae7d;
+      --accent-text: #0e1a13;
+      --code-bg: #1f2124;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1b1c1e;
+    --panel: #26282b;
+    --text: #ececec;
+    --muted: #a0a0a6;
+    --border: #3a3d42;
+    --accent: #4fae7d;
+    --accent-text: #0e1a13;
+    --code-bg: #1f2124;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header { padding: 18px 16px 4px; max-width: 1180px; margin: 0 auto; }
+  header h1 { margin: 0; font-size: 22px; }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 620px) minmax(0, 1fr);
+    gap: 20px;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 14px 16px 40px;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
+
+  .player-tag {
+    display: flex; justify-content: space-between; align-items: center;
+    font-weight: 600; padding: 6px 2px; font-size: 14px;
+  }
+  .player-tag .clock { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .board-wrap { position: relative; }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 4px 18px rgba(0,0,0,.18);
+    user-select: none;
+    touch-action: manipulation;
+  }
+  .sq { position: relative; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .sq.light { background: var(--light-sq); }
+  .sq.dark { background: var(--dark-sq); }
+  .sq.last::after, .sq.sel::after, .sq.hint::after, .sq.check::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+  }
+  .sq.last::after { background: var(--last-move); }
+  .sq.hint::after { background: var(--hint); }
+  .sq.sel::after { background: var(--selected); }
+  .sq.check::after { background: radial-gradient(circle, var(--check) 0%, rgba(220,40,40,0) 75%); }
+  .sq .dot {
+    position: absolute; width: 30%; height: 30%; border-radius: 50%;
+    background: rgba(0,0,0,.22); pointer-events: none; z-index: 2;
+  }
+  .sq .ring {
+    position: absolute; inset: 4%; border-radius: 50%;
+    border: 5px solid rgba(0,0,0,.22); pointer-events: none; z-index: 2;
+  }
+  .piece {
+    position: relative; z-index: 1;
+    font-size: min(9vw, 60px);
+    line-height: 1;
+    pointer-events: none;
+    font-family: "Segoe UI Symbol", "DejaVu Sans", "Noto Sans Symbols2", "Arial Unicode MS", sans-serif;
+  }
+  .piece.w { color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000, 0 1px 2px #000; }
+  .piece.b { color: #111; text-shadow: 0 0 2px #fff8, 0 1px 1px #fff6; }
+  .coord { position: absolute; font-size: 11px; font-weight: 700; pointer-events: none; z-index: 2; }
+  .coord.file { right: 3px; bottom: 1px; }
+  .coord.rank { left: 3px; top: 1px; }
+  .sq.light .coord { color: var(--dark-sq); }
+  .sq.dark .coord { color: var(--light-sq); }
+
+  #promo {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.45); z-index: 10; border-radius: 6px;
+  }
+  #promo.show { display: flex; }
+  #promo .choices { display: flex; gap: 8px; background: var(--panel); padding: 10px; border-radius: 10px; }
+  #promo button { font-size: 44px; width: 64px; height: 64px; padding: 0; }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; margin-bottom: 14px;
+  }
+  .panel h2 { margin: 0 0 10px; font-size: 15px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .row:last-child { margin-bottom: 0; }
+  label { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+  label.inline { flex-direction: row; align-items: center; gap: 6px; color: var(--text); }
+  select, input[type=number] {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px; font-size: 14px; min-width: 0;
+  }
+  input[type=range] { width: 180px; }
+  .inline-range { display: flex; align-items: center; gap: 8px; color: var(--text); }
+  button {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 12px; font-size: 14px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  #status { font-weight: 600; font-size: 15px; min-height: 22px; }
+  .analysis {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12.5px; background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px; overflow-wrap: anywhere; min-height: 54px;
+  }
+  .analysis b { color: var(--accent); }
+  .evalbar { height: 10px; border-radius: 5px; background: #222; overflow: hidden; margin: 8px 0 2px; border: 1px solid var(--border); }
+  .evalbar div { height: 100%; width: 50%; background: #f2f2f2; transition: width .3s; }
+  #moves {
+    max-height: 220px; overflow-y: auto; font-variant-numeric: tabular-nums;
+    display: grid; grid-template-columns: 40px 1fr 1fr; gap: 2px 8px; font-size: 14px;
+  }
+  #moves .n { color: var(--muted); }
+  #moves .cur { background: var(--last-move); border-radius: 3px; }
+  .score { display: flex; gap: 18px; font-size: 14px; flex-wrap: wrap; }
+  .score b { font-size: 18px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  details summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+  details p, details li { font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>♞ Chess Robot vs Stockfish</h1>
+  <p>"Robot" is a classic hand-written chess engine (alpha-beta search + evaluation function, no AI/neural nets). Watch it fight Stockfish, or play against either one yourself.</p>
+</header>
+
+<main>
+  <section>
+    <div class="player-tag"><span id="topName">Black</span><span class="clock" id="topInfo"></span></div>
+    <div class="board-wrap">
+      <div id="board"></div>
+      <div id="promo"><div class="choices" id="promoChoices"></div></div>
+    </div>
+    <div class="player-tag"><span id="bottomName">White</span><span class="clock" id="bottomInfo"></span></div>
+    <div class="evalbar" title="Robot's evaluation (white's share)"><div id="evalFill"></div></div>
+    <div class="muted" id="evalText">Eval: 0.00</div>
+  </section>
+
+  <section>
+    <div class="panel">
+      <h2>Game setup</h2>
+      <div class="row">
+        <label>White
+          <select id="whiteSel">
+            <option value="robot" selected>Robot (my engine)</option>
+            <option value="stockfish">Stockfish</option>
+            <option value="human">You</option>
+          </select>
+        </label>
+        <label>Black
+          <select id="blackSel">
+            <option value="robot">Robot (my engine)</option>
+            <option value="stockfish" selected>Stockfish</option>
+            <option value="human">You</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>Robot think time (ms)
+          <input type="number" id="robotTime" value="1500" min="100" max="60000" step="100" />
+        </label>
+        <label>Stockfish think time (ms)
+          <input type="number" id="sfTime" value="500" min="50" max="60000" step="50" />
+        </label>
+      </div>
+      <div class="row">
+        <label>Stockfish skill level (0 = weakest, 20 = full strength)
+          <span class="inline-range"><input type="range" id="sfSkill" min="0" max="20" value="3" /> <b id="skillVal">3</b></span>
+        </label>
+      </div>
+      <div class="row">
+        <label>Delay between moves (ms)
+          <input type="number" id="moveDelay" value="400" min="0" max="5000" step="100" />
+        </label>
+        <label class="inline"><input type="checkbox" id="autoNext" /> Auto-start next game (swap colors)</label>
+      </div>
+      <div class="row">
+        <button class="primary" id="newBtn">New game</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="flipBtn">Flip board</button>
+        <button id="undoBtn">Undo</button>
+        <button id="hintBtn">Hint (Robot's best move)</button>
+      </div>
+      <div id="status">Loading…</div>
+      <div class="muted" id="sfState">Stockfish: loading…</div>
+    </div>
+
+    <div class="panel">
+      <h2>Robot's analysis</h2>
+      <div class="analysis" id="robotAnalysis">Waiting…</div>
+      <h2 style="margin-top:12px">Stockfish's analysis</h2>
+      <div class="analysis" id="sfAnalysis">Waiting…</div>
+    </div>
+
+    <div class="panel">
+      <h2>Robot vs Stockfish score</h2>
+      <div class="score">
+        <span>Robot wins: <b id="sWin">0</b></span>
+        <span>Draws: <b id="sDraw">0</b></span>
+        <span>Stockfish wins: <b id="sLoss">0</b></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Moves</h2>
+      <div id="moves"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="copyPgn">Copy PGN</button>
+        <button id="copyFen">Copy FEN</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <details>
+        <summary>How the Robot picks a move</summary>
+        <ul>
+          <li><b>Move generator</b> on a 0x88 board: every legal move incl. castling, en passant, promotion.</li>
+          <li><b>Evaluation</b>: material + piece-square tables (tapered between middlegame and endgame), bishop pair, doubled/isolated/passed pawns, rooks on open files.</li>
+          <li><b>Search</b>: iterative-deepening negamax with alpha-beta pruning, principal-variation search, transposition table (Zobrist hashing), quiescence search on captures, null-move pruning, late-move reductions, killer &amp; history move ordering, check extensions.</li>
+          <li>It looks as deep as it can in the time you give it and plays the move with the best guaranteed score.</li>
+        </ul>
+        <p>Full-strength Stockfish is ~3500 Elo and will beat it every time; lower Stockfish's skill level for a fair fight.</p>
+      </details>
+    </div>
+  </section>
+</main>
+
+<!-- ===================================================================
+     THE ROBOT: a classic chess engine (no AI). This same script runs in
+     the page (for rules / legal moves) and in a Web Worker (for search).
+     =================================================================== -->
+<script id="engine-src">
+"use strict";
+var Engine = (function () {
+  const P = 1, N = 2, B = 3, R = 4, Q = 5, K = 6;
+  const WHITE = 0, BLACK = 1;
+  const MATE = 30000, INF = 32000, MAX_PLY = 64;
+
+  const N_DIRS = [33, 31, 18, 14, -33, -31, -18, -14];
+  const B_DIRS = [15, 17, -15, -17];
+  const R_DIRS = [16, -16, 1, -1];
+  const K_DIRS = [15, 16, 17, 1, -1, -15, -16, -17];
+
+  // Move encoding: from | to<<7 | promo<<14 | flags<<17
+  const F_EP = 1, F_CASTLE = 2, F_DOUBLE = 4;
+  const mk = (from, to, promo, flags) => from | (to << 7) | (promo << 14) | (flags << 17);
+  const mFrom = m => m & 127;
+  const mTo = m => (m >> 7) & 127;
+  const mPromo = m => (m >> 14) & 7;
+  const mFlags = m => m >> 17;
+
+  const sqName = sq => "abcdefgh"[sq & 7] + ((sq >> 4) + 1);
+  const parseSq = s => (s.charCodeAt(0) - 97) + (s.charCodeAt(1) - 49) * 16;
+
+  // ---------------- Zobrist hashing (two 32-bit halves) ----------------
+  let seed = 0x9E3779B9 | 0;
+  function rnd() { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return seed | 0; }
+  const zPieceLo = new Int32Array(13 * 128), zPieceHi = new Int32Array(13 * 128);
+  for (let i = 0; i < zPieceLo.length; i++) { zPieceLo[i] = rnd(); zPieceHi[i] = rnd(); }
+  const zCastleLo = new Int32Array(16), zCastleHi = new Int32Array(16);
+  for (let i = 0; i < 16; i++) { zCastleLo[i] = rnd(); zCastleHi[i] = rnd(); }
+  const zEpLo = new Int32Array(128), zEpHi = new Int32Array(128);
+  for (let i = 0; i < 128; i++) { zEpLo[i] = rnd(); zEpHi[i] = rnd(); }
+  const zSideLo = rnd(), zSideHi = rnd();
+
+  const castleMask = new Int32Array(128).fill(15);
+  castleMask[0] = 15 & ~2; castleMask[7] = 15 & ~1; castleMask[4] = 15 & ~3;
+  castleMask[112] = 15 & ~8; castleMask[119] = 15 & ~4; castleMask[116] = 15 & ~12;
+
+  // ---------------- Evaluation tables (PeSTO, a8..h8 first) ----------------
+  const MG_VAL = [0, 82, 337, 365, 477, 1025, 0];
+  const EG_VAL = [0, 94, 281, 297, 512, 936, 0];
+  const PHASE = [0, 0, 1, 1, 2, 4, 0];
+  const MG_PST = [null,
+    [0,0,0,0,0,0,0,0, 98,134,61,95,68,126,34,-11, -6,7,26,31,65,56,25,-20, -14,13,6,21,23,12,17,-23,
+     -27,-2,-5,12,17,6,10,-25, -26,-4,-4,-10,3,3,33,-12, -35,-1,-20,-23,-15,24,38,-22, 0,0,0,0,0,0,0,0],
+    [-167,-89,-34,-49,61,-97,-15,-107, -73,-41,72,36,23,62,7,-17, -47,60,37,65,84,129,73,44, -9,17,19,53,37,69,18,22,
+     -13,4,16,13,28,19,21,-8, -23,-9,12,10,19,17,25,-16, -29,-53,-12,-3,-1,18,-14,-19, -105,-21,-58,-33,-17,-28,-19,-23],
+    [-29,4,-82,-37,-25,-42,7,-8, -26,16,-18,-13,30,59,18,-47, -16,37,43,40,35,50,37,-2, -4,5,19,50,37,37,7,-2,
+     -6,13,13,26,34,12,10,4, 0,15,15,15,14,27,18,10, 4,15,16,0,7,21,33,1, -33,-3,-14,-21,-13,-12,-39,-21],
+    [32,42,32,51,63,9,31,43, 27,32,58,62,80,67,26,44, -5,19,26,36,17,45,61,16, -24,-11,7,26,24,35,-8,-20,
+     -36,-26,-12,-1,9,-7,6,-23, -45,-25,-16,-17,3,0,-5,-33, -44,-16,-20,-9,-1,11,-6,-71, -19,-13,1,17,16,7,-37,-26],
+    [-28,0,29,12,59,44,43,45, -24,-39,-5,1,-16,57,28,54, -13,-17,7,8,29,56,47,57, -27,-27,-16,-16,-1,17,-2,1,
+     -9,-26,-9,-10,-2,-4,3,-3, -14,2,-11,-2,-5,2,14,5, -35,-8,11,2,8,15,-3,1, -1,-18,-9,10,-15,-25,-31,-50],
+    [-65,23,16,-15,-56,-34,2,13, 29,-1,-20,-7,-8,-4,-38,-29, -9,24,2,-16,-20,6,22,-22, -17,-20,-12,-27,-30,-25,-14,-36,
+     -49,-1,-27,-39,-46,-44,-33,-51, -14,-14,-22,-46,-44,-30,-15,-27, 1,7,-8,-64,-43,-16,9,8, -15,36,12,-54,8,-28,24,14]
+  ];
+  const EG_PST = [null,
+    [0,0,0,0,0,0,0,0, 178,173,158,134,147,132,165,187, 94,100,85,67,56,53,82,84, 32,24,13,5,-2,4,17,17,
+     13,9,-3,-7,-7,-8,3,-1, 4,7,-6,1,0,-5,-1,-8, 13,8,8,10,13,0,2,-7, 0,0,0,0,0,0,0,0],
+    [-58,-38,-13,-28,-31,-27,-63,-99, -25,-8,-25,-2,-9,-25,-24,-52, -24,-20,10,9,-1,-9,-19,-41, -17,3,22,22,22,11,8,-18,
+     -18,-6,16,25,16,17,4,-18, -23,-3,-1,15,10,-3,-20,-22, -42,-20,-10,-5,-2,-20,-23,-44, -29,-51,-23,-15,-22,-18,-50,-64],
+    [-14,-21,-11,-8,-7,-9,-17,-24, -8,-4,7,-12,-3,-13,-4,-14, 2,-8,0,-1,-2,6,0,4, -3,9,12,9,14,10,3,2,
+     -6,3,13,19,7,10,-3,-9, -12,-3,8,10,13,3,-7,-15, -14,-18,-7,-1,4,-9,-15,-27, -23,-9,-23,-5,-9,-16,-5,-17],
+    [13,10,18,15,12,12,8,5, 11,13,13,11,-3,3,8,3, 7,7,7,5,4,-3,-5,-3, 4,3,13,1,2,1,-1,2,
+     3,5,8,4,-5,-6,-8,-11, -4,0,-5,-1,-7,-12,-8,-16, -6,-6,0,2,-9,-9,-11,-3, -9,2,3,-1,-5,-13,4,-20],
+    [-9,22,22,27,27,19,10,20, -17,20,32,41,58,25,30,0, -20,6,9,49,47,35,19,9, 3,22,24,45,57,40,57,36,
+     -18,28,19,47,31,34,39,23, -16,-27,15,6,9,17,10,5, -22,-23,-30,-16,-16,-23,-36,-32, -33,-28,-22,-43,-5,-32,-20,-41],
+    [-74,-35,-18,-18,-11,15,4,-17, -12,17,14,17,17,38,23,11, 10,17,23,15,20,45,44,13, -8,22,24,27,26,33,26,3,
+     -18,-4,21,24,27,23,9,-11, -19,-3,11,21,23,16,7,-9, -27,-11,4,13,14,4,-5,-17, -53,-34,-21,-11,-28,-14,-24,-43]
+  ];
+  // Combined value + table, indexed [color][type][0x88 square]
+  const MG = [[], []], EG = [[], []];
+  for (let c = 0; c < 2; c++) {
+    for (let t = 1; t <= 6; t++) {
+      MG[c][t] = new Int32Array(128); EG[c][t] = new Int32Array(128);
+      for (let sq = 0; sq < 128; sq++) {
+        if (sq & 0x88) continue;
+        const r = sq >> 4, f = sq & 7;
+        const idx = c === WHITE ? (7 - r) * 8 + f : r * 8 + f;
+        MG[c][t][sq] = MG_VAL[t] + MG_PST[t][idx];
+        EG[c][t][sq] = EG_VAL[t] + EG_PST[t][idx];
+      }
+    }
+  }
+  const PASSED_MG = [0, 5, 10, 15, 25, 40, 60, 0];
+  const PASSED_EG = [0, 10, 20, 35, 60, 100, 150, 0];
+  const SEE_VAL = [0, 100, 320, 330, 500, 900, 20000];
+
+  // ======================================================================
+  //  Position: board state, move generation, make/unmake
+  // ======================================================================
+  class Position {
+    constructor() {
+      this.board = new Int8Array(128);
+      this.kingSq = [4, 116];
+      const S = 4096;
+      this.uMove = new Int32Array(S); this.uCap = new Int8Array(S); this.uCastle = new Int8Array(S);
+      this.uEp = new Int16Array(S); this.uHalf = new Int16Array(S);
+      this.uLo = new Int32Array(S); this.uHi = new Int32Array(S);
+      this.setFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    }
+
+    xorPiece(p, sq) {
+      const i = (p > 0 ? p : 6 - p) * 128 + sq;
+      this.lo ^= zPieceLo[i]; this.hi ^= zPieceHi[i];
+    }
+
+    setFen(fen) {
+      const parts = fen.trim().split(/\s+/);
+      const b = this.board; b.fill(0);
+      let r = 7, f = 0;
+      for (const ch of parts[0]) {
+        if (ch === "/") { r--; f = 0; }
+        else if (ch >= "1" && ch <= "8") f += +ch;
+        else {
+          const t = " pnbrqk".indexOf(ch.toLowerCase());
+          const sq = r * 16 + f;
+          b[sq] = ch === ch.toUpperCase() ? t : -t;
+          if (t === K) this.kingSq[ch === "K" ? 0 : 1] = sq;
+          f++;
+        }
+      }
+      this.side = parts[1] === "b" ? BLACK : WHITE;
+      const c = parts[2] || "-";
+      this.castle = (c.includes("K") ? 1 : 0) | (c.includes("Q") ? 2 : 0) | (c.includes("k") ? 4 : 0) | (c.includes("q") ? 8 : 0);
+      this.ep = parts[3] && parts[3] !== "-" ? parseSq(parts[3]) : -1;
+      this.half = parts[4] ? parseInt(parts[4], 10) : 0;
+      this.fullStart = parts[5] ? parseInt(parts[5], 10) : 1;
+      this.sp = 0;
+      this.startSide = this.side;
+      this.computeHash();
+    }
+
+    computeHash() {
+      this.lo = 0; this.hi = 0;
+      for (let sq = 0; sq < 128; sq++) if (!(sq & 0x88) && this.board[sq]) this.xorPiece(this.board[sq], sq);
+      this.lo ^= zCastleLo[this.castle]; this.hi ^= zCastleHi[this.castle];
+      if (this.ep >= 0) { this.lo ^= zEpLo[this.ep]; this.hi ^= zEpHi[this.ep]; }
+      if (this.side === BLACK) { this.lo ^= zSideLo; this.hi ^= zSideHi; }
+    }
+
+    fen() {
+      let s = "";
+      for (let r = 7; r >= 0; r--) {
+        let empty = 0;
+        for (let f = 0; f < 8; f++) {
+          const p = this.board[r * 16 + f];
+          if (!p) { empty++; continue; }
+          if (empty) { s += empty; empty = 0; }
+          const ch = " pnbrqk"[Math.abs(p)];
+          s += p > 0 ? ch.toUpperCase() : ch;
+        }
+        if (empty) s += empty;
+        if (r) s += "/";
+      }
+      let c = (this.castle & 1 ? "K" : "") + (this.castle & 2 ? "Q" : "") + (this.castle & 4 ? "k" : "") + (this.castle & 8 ? "q" : "");
+      const full = this.fullStart + ((this.sp + (this.startSide === BLACK ? 1 : 0)) >> 1);
+      return s + " " + (this.side ? "b" : "w") + " " + (c || "-") + " " + (this.ep >= 0 ? sqName(this.ep) : "-") + " " + this.half + " " + full;
+    }
+
+    attacked(sq, by) {
+      const b = this.board;
+      let t;
+      if (by === WHITE) {
+        t = sq - 15; if (!(t & 0x88) && b[t] === P) return true;
+        t = sq - 17; if (!(t & 0x88) && b[t] === P) return true;
+      } else {
+        t = sq + 15; if (!(t & 0x88) && b[t] === -P) return true;
+        t = sq + 17; if (!(t & 0x88) && b[t] === -P) return true;
+      }
+      const s = by === WHITE ? 1 : -1;
+      for (let i = 0; i < 8; i++) { t = sq + N_DIRS[i]; if (!(t & 0x88) && b[t] === s * N) return true; }
+      for (let i = 0; i < 8; i++) { t = sq + K_DIRS[i]; if (!(t & 0x88) && b[t] === s * K) return true; }
+      for (let i = 0; i < 4; i++) {
+        const d = B_DIRS[i];
+        for (t = sq + d; !(t & 0x88); t += d) {
+          const q = b[t];
+          if (q) { if (q === s * B || q === s * Q) return true; break; }
+        }
+      }
+      for (let i = 0; i < 4; i++) {
+        const d = R_DIRS[i];
+        for (t = sq + d; !(t & 0x88); t += d) {
+          const q = b[t];
+          if (q) { if (q === s * R || q === s * Q) return true; break; }
+        }
+      }
+      return false;
+    }
+
+    inCheck() { return this.attacked(this.kingSq[this.side], this.side ^ 1); }
+
+    // Pseudo-legal move generation into out[n..]; returns new end index.
+    gen(out, n, capsOnly) {
+      const b = this.board, us = this.side, s = us === WHITE ? 1 : -1;
+      const fwd = 16 * s, startRank = us === WHITE ? 1 : 6, promoRank = us === WHITE ? 6 : 1;
+      for (let sq = 0; sq < 128; sq++) {
+        if (sq & 0x88) { sq += 7; continue; }
+        const p = b[sq];
+        if (!p || p * s < 0) continue;
+        const t = p * s;
+        if (t === P) {
+          const r = sq >> 4, to = sq + fwd;
+          if (!b[to]) {
+            if (r === promoRank) {
+              out[n++] = mk(sq, to, Q, 0);
+              if (!capsOnly) { out[n++] = mk(sq, to, N, 0); out[n++] = mk(sq, to, R, 0); out[n++] = mk(sq, to, B, 0); }
+            } else if (!capsOnly) {
+              out[n++] = mk(sq, to, 0, 0);
+              if (r === startRank && !b[to + fwd]) out[n++] = mk(sq, to + fwd, 0, F_DOUBLE);
+            }
+          }
+          for (let k = -1; k <= 1; k += 2) {
+            const c = to + k;
+            if (c & 0x88) continue;
+            if (b[c] * s < 0) {
+              if (r === promoRank) {
+                out[n++] = mk(sq, c, Q, 0);
+                if (!capsOnly) { out[n++] = mk(sq, c, N, 0); out[n++] = mk(sq, c, R, 0); out[n++] = mk(sq, c, B, 0); }
+              } else out[n++] = mk(sq, c, 0, 0);
+            } else if (c === this.ep) out[n++] = mk(sq, c, 0, F_EP);
+          }
+        } else if (t === N || t === K) {
+          const dirs = t === N ? N_DIRS : K_DIRS;
+          for (let i = 0; i < 8; i++) {
+            const to = sq + dirs[i];
+            if (to & 0x88) continue;
+            const q = b[to];
+            if (!q) { if (!capsOnly) out[n++] = mk(sq, to, 0, 0); }
+            else if (q * s < 0) out[n++] = mk(sq, to, 0, 0);
+          }
+          if (t === K && !capsOnly) {
+            const them = us ^ 1;
+            if (us === WHITE && sq === 4) {
+              if ((this.castle & 1) && !b[5] && !b[6] && !this.attacked(4, them) && !this.attacked(5, them) && !this.attacked(6, them))
+                out[n++] = mk(4, 6, 0, F_CASTLE);
+              if ((this.castle & 2) && !b[3] && !b[2] && !b[1] && !this.attacked(4, them) && !this.attacked(3, them) && !this.attacked(2, them))
+                out[n++] = mk(4, 2, 0, F_CASTLE);
+            } else if (us === BLACK && sq === 116) {
+              if ((this.castle & 4) && !b[117] && !b[118] && !this.attacked(116, them) && !this.attacked(117, them) && !this.attacked(118, them))
+                out[n++] = mk(116, 118, 0, F_CASTLE);
+              if ((this.castle & 8) && !b[115] && !b[114] && !b[113] && !this.attacked(116, them) && !this.attacked(115, them) && !this.attacked(114, them))
+                out[n++] = mk(116, 114, 0, F_CASTLE);
+            }
+          }
+        } else {
+          const dirs = t === B ? B_DIRS : t === R ? R_DIRS : K_DIRS;
+          for (let i = 0; i < dirs.length; i++) {
+            const d = dirs[i];
+            for (let to = sq + d; !(to & 0x88); to += d) {
+              const q = b[to];
+              if (!q) { if (!capsOnly) out[n++] = mk(sq, to, 0, 0); continue; }
+              if (q * s < 0) out[n++] = mk(sq, to, 0, 0);
+              break;
+            }
+          }
+        }
+      }
+      return n;
+    }
+
+    // Returns false (and leaves the position unchanged) if the move is illegal.
+    make(m) {
+      const b = this.board, us = this.side;
+      const from = m & 127, to = (m >> 7) & 127, promo = (m >> 14) & 7, flags = m >> 17;
+      const p = b[from];
+      const s = this.sp++;
+      this.uMove[s] = m; this.uCastle[s] = this.castle; this.uEp[s] = this.ep;
+      this.uHalf[s] = this.half; this.uLo[s] = this.lo; this.uHi[s] = this.hi;
+
+      if (this.ep >= 0) { this.lo ^= zEpLo[this.ep]; this.hi ^= zEpHi[this.ep]; }
+      this.lo ^= zCastleLo[this.castle]; this.hi ^= zCastleHi[this.castle];
+
+      let cap = b[to];
+      this.xorPiece(p, from); b[from] = 0;
+      if (cap) this.xorPiece(cap, to);
+      if (flags & F_EP) {
+        const cs = us === WHITE ? to - 16 : to + 16;
+        cap = b[cs]; this.xorPiece(cap, cs); b[cs] = 0;
+      }
+      this.uCap[s] = cap;
+      const placed = promo ? (us === WHITE ? promo : -promo) : p;
+      b[to] = placed; this.xorPiece(placed, to);
+
+      if (flags & F_CASTLE) {
+        let rf, rt;
+        if (to === 6) { rf = 7; rt = 5; } else if (to === 2) { rf = 0; rt = 3; }
+        else if (to === 118) { rf = 119; rt = 117; } else { rf = 112; rt = 115; }
+        const rook = b[rf];
+        this.xorPiece(rook, rf); b[rf] = 0; b[rt] = rook; this.xorPiece(rook, rt);
+      }
+      if (p === K) this.kingSq[0] = to; else if (p === -K) this.kingSq[1] = to;
+
+      this.castle &= castleMask[from] & castleMask[to];
+      this.lo ^= zCastleLo[this.castle]; this.hi ^= zCastleHi[this.castle];
+
+      this.ep = -1;
+      if (flags & F_DOUBLE) {
+        // Only record en passant if an enemy pawn could actually capture.
+        const ep = (from + to) >> 1, ep1 = to - 1, ep2 = to + 1, ePawn = us === WHITE ? -P : P;
+        if ((!(ep1 & 0x88) && b[ep1] === ePawn) || (!(ep2 & 0x88) && b[ep2] === ePawn)) {
+          this.ep = ep; this.lo ^= zEpLo[ep]; this.hi ^= zEpHi[ep];
+        }
+      }
+      this.half = (cap || p === P || p === -P) ? 0 : this.half + 1;
+      this.side = us ^ 1; this.lo ^= zSideLo; this.hi ^= zSideHi;
+
+      if (this.attacked(this.kingSq[us], us ^ 1)) { this.unmake(); return false; }
+      return true;
+    }
+
+    unmake() {
+      const s = --this.sp, b = this.board;
+      const m = this.uMove[s];
+      const from = m & 127, to = (m >> 7) & 127, promo = (m >> 14) & 7, flags = m >> 17;
+      this.side ^= 1;
+      const us = this.side;
+      let p = b[to];
+      if (promo) p = us === WHITE ? P : -P;
+      b[from] = p;
+      if (flags & F_EP) { b[to] = 0; b[us === WHITE ? to - 16 : to + 16] = this.uCap[s]; }
+      else b[to] = this.uCap[s];
+      if (flags & F_CASTLE) {
+        let rf, rt;
+        if (to === 6) { rf = 7; rt = 5; } else if (to === 2) { rf = 0; rt = 3; }
+        else if (to === 118) { rf = 119; rt = 117; } else { rf = 112; rt = 115; }
+        b[rf] = b[rt]; b[rt] = 0;
+      }
+      if (p === K) this.kingSq[0] = from; else if (p === -K) this.kingSq[1] = from;
+      this.castle = this.uCastle[s]; this.ep = this.uEp[s]; this.half = this.uHalf[s];
+      this.lo = this.uLo[s]; this.hi = this.uHi[s];
+    }
+
+    makeNull() {
+      const s = this.sp++;
+      this.uMove[s] = 0; this.uCap[s] = 0; this.uCastle[s] = this.castle; this.uEp[s] = this.ep;
+      this.uHalf[s] = this.half; this.uLo[s] = this.lo; this.uHi[s] = this.hi;
+      if (this.ep >= 0) { this.lo ^= zEpLo[this.ep]; this.hi ^= zEpHi[this.ep]; this.ep = -1; }
+      this.half = 0;
+      this.side ^= 1; this.lo ^= zSideLo; this.hi ^= zSideHi;
+    }
+
+    unmakeNull() {
+      const s = --this.sp;
+      this.side ^= 1;
+      this.ep = this.uEp[s]; this.half = this.uHalf[s]; this.lo = this.uLo[s]; this.hi = this.uHi[s];
+    }
+
+    legalMoves() {
+      const buf = new Int32Array(256), n = this.gen(buf, 0, false), res = [];
+      for (let i = 0; i < n; i++) if (this.make(buf[i])) { this.unmake(); res.push(buf[i]); }
+      return res;
+    }
+
+    // Repeated at least once since the last irreversible move (used in search).
+    isRepetition() {
+      for (let i = this.sp - 2; i >= 0 && i >= this.sp - this.half; i -= 2)
+        if (this.uLo[i] === this.lo && this.uHi[i] === this.hi) return true;
+      return false;
+    }
+
+    repetitionCount() {
+      let c = 1;
+      for (let i = this.sp - 2; i >= 0 && i >= this.sp - this.half; i -= 2)
+        if (this.uLo[i] === this.lo && this.uHi[i] === this.hi) c++;
+      return c;
+    }
+
+    insufficientMaterial() {
+      const b = this.board;
+      let minors = 0, knights = 0;
+      const bishopColors = [];
+      for (let sq = 0; sq < 128; sq++) {
+        if (sq & 0x88) { sq += 7; continue; }
+        const t = Math.abs(b[sq]);
+        if (t === P || t === R || t === Q) return false;
+        if (t === N) { minors++; knights++; }
+        if (t === B) { minors++; bishopColors.push(((sq >> 4) + (sq & 7)) & 1); }
+      }
+      if (minors <= 1) return true;
+      if (knights === 0 && bishopColors.every(c => c === bishopColors[0])) return true;
+      return false;
+    }
+
+    hasNonPawn(side) {
+      const b = this.board, s = side === WHITE ? 1 : -1;
+      for (let sq = 0; sq < 128; sq++) {
+        if (sq & 0x88) { sq += 7; continue; }
+        const t = b[sq] * s;
+        if (t > 1 && t < 6) return true;
+      }
+      return false;
+    }
+
+    // ---------------- Static evaluation (side-to-move perspective) ----------------
+    evaluate() {
+      const b = this.board;
+      let mgW = 0, mgB = 0, egW = 0, egB = 0, phase = 0, bW = 0, bB = 0;
+      const wCnt = [0,0,0,0,0,0,0,0], bCnt = [0,0,0,0,0,0,0,0];
+      const wMin = [8,8,8,8,8,8,8,8], wMax = [-1,-1,-1,-1,-1,-1,-1,-1];
+      const bMin = [8,8,8,8,8,8,8,8], bMax = [-1,-1,-1,-1,-1,-1,-1,-1];
+      for (let sq = 0; sq < 128; sq++) {
+        if (sq & 0x88) { sq += 7; continue; }
+        const p = b[sq];
+        if (!p) continue;
+        if (p > 0) {
+          mgW += MG[0][p][sq]; egW += EG[0][p][sq]; phase += PHASE[p];
+          if (p === B) bW++;
+          else if (p === P) { const f = sq & 7, r = sq >> 4; wCnt[f]++; if (r < wMin[f]) wMin[f] = r; if (r > wMax[f]) wMax[f] = r; }
+        } else {
+          const t = -p;
+          mgB += MG[1][t][sq]; egB += EG[1][t][sq]; phase += PHASE[t];
+          if (t === B) bB++;
+          else if (t === P) { const f = sq & 7, r = sq >> 4; bCnt[f]++; if (r < bMin[f]) bMin[f] = r; if (r > bMax[f]) bMax[f] = r; }
+        }
+      }
+      if (bW >= 2) { mgW += 30; egW += 50; }
+      if (bB >= 2) { mgB += 30; egB += 50; }
+
+      // Pawn structure
+      for (let f = 0; f < 8; f++) {
+        if (wCnt[f] > 1) { mgW -= 10 * (wCnt[f] - 1); egW -= 20 * (wCnt[f] - 1); }
+        if (bCnt[f] > 1) { mgB -= 10 * (bCnt[f] - 1); egB -= 20 * (bCnt[f] - 1); }
+        const wl = f > 0 ? wCnt[f - 1] : 0, wr = f < 7 ? wCnt[f + 1] : 0;
+        const bl = f > 0 ? bCnt[f - 1] : 0, br = f < 7 ? bCnt[f + 1] : 0;
+        if (wCnt[f] && !wl && !wr) { mgW -= 12 * wCnt[f]; egW -= 15 * wCnt[f]; }
+        if (bCnt[f] && !bl && !br) { mgB -= 12 * bCnt[f]; egB -= 15 * bCnt[f]; }
+      }
+      for (let sq = 0; sq < 128; sq++) {
+        if (sq & 0x88) { sq += 7; continue; }
+        const p = b[sq];
+        if (p === P) {
+          const f = sq & 7, r = sq >> 4;
+          let passed = true;
+          for (let ff = Math.max(0, f - 1); ff <= Math.min(7, f + 1); ff++) if (bMax[ff] > r) { passed = false; break; }
+          if (passed) { mgW += PASSED_MG[r]; egW += PASSED_EG[r]; }
+        } else if (p === -P) {
+          const f = sq & 7, r = sq >> 4;
+          let passed = true;
+          for (let ff = Math.max(0, f - 1); ff <= Math.min(7, f + 1); ff++) if (wMin[ff] < r) { passed = false; break; }
+          if (passed) { mgB += PASSED_MG[7 - r]; egB += PASSED_EG[7 - r]; }
+        } else if (p === R || p === -R) {
+          const f = sq & 7, own = p > 0 ? wCnt[f] : bCnt[f], opp = p > 0 ? bCnt[f] : wCnt[f];
+          const bonus = !own ? (!opp ? 25 : 12) : 0;
+          if (p > 0) mgW += bonus; else mgB += bonus;
+        }
+      }
+
+      if (phase > 24) phase = 24;
+      let score = (((mgW - mgB) * phase + (egW - egB) * (24 - phase)) / 24) | 0;
+      score += this.side === WHITE ? 10 : -10; // tempo
+      return this.side === WHITE ? score : -score;
+    }
+
+    // ---------------- Notation helpers ----------------
+    moveToUci(m) {
+      const pr = mPromo(m);
+      return sqName(mFrom(m)) + sqName(mTo(m)) + (pr ? " pnbrqk"[pr] : "");
+    }
+
+    uciToMove(u) {
+      const from = parseSq(u.slice(0, 2)), to = parseSq(u.slice(2, 4));
+      const pr = u.length > 4 ? " pnbrqk".indexOf(u[4].toLowerCase()) : 0;
+      for (const m of this.legalMoves())
+        if (mFrom(m) === from && mTo(m) === to && mPromo(m) === pr) return m;
+      return 0;
+    }
+
+    san(m) {
+      const b = this.board, from = mFrom(m), to = mTo(m), pr = mPromo(m), fl = mFlags(m);
+      const t = Math.abs(b[from]);
+      let s;
+      if (fl & F_CASTLE) s = (to & 7) === 6 ? "O-O" : "O-O-O";
+      else {
+        const cap = b[to] !== 0 || (fl & F_EP);
+        if (t === P) {
+          s = (cap ? "abcdefgh"[from & 7] + "x" : "") + sqName(to) + (pr ? "=" + " PNBRQK"[pr] : "");
+        } else {
+          s = " PNBRQK"[t];
+          const others = this.legalMoves().filter(o => o !== m && mTo(o) === to && Math.abs(b[mFrom(o)]) === t);
+          if (others.length) {
+            const sameFile = others.some(o => (mFrom(o) & 7) === (from & 7));
+            const sameRank = others.some(o => (mFrom(o) >> 4) === (from >> 4));
+            if (!sameFile) s += "abcdefgh"[from & 7];
+            else if (!sameRank) s += (from >> 4) + 1;
+            else s += sqName(from);
+          }
+          s += (cap ? "x" : "") + sqName(to);
+        }
+      }
+      this.make(m);
+      if (this.inCheck()) s += this.legalMoves().length ? "+" : "#";
+      this.unmake();
+      return s;
+    }
+  }
+
+  // ======================================================================
+  //  Searcher: iterative deepening alpha-beta
+  // ======================================================================
+  const TT_BITS = 20, TT_SIZE = 1 << TT_BITS, TT_MASK = TT_SIZE - 1;
+  const TT_EXACT = 1, TT_LOWER = 2, TT_UPPER = 3;
+
+  class Searcher {
+    constructor(pos) {
+      this.pos = pos;
+      this.ttLo = new Int32Array(TT_SIZE); this.ttHi = new Int32Array(TT_SIZE);
+      this.ttMove = new Int32Array(TT_SIZE); this.ttScore = new Int16Array(TT_SIZE);
+      this.ttDepth = new Int8Array(TT_SIZE); this.ttFlag = new Int8Array(TT_SIZE);
+      this.moves = new Int32Array(256 * (MAX_PLY + 1));
+      this.scores = new Int32Array(256 * (MAX_PLY + 1));
+      this.killers = new Int32Array(2 * (MAX_PLY + 1));
+      this.history = new Int32Array(128 * 128);
+      this.pvTable = new Int32Array(MAX_PLY * MAX_PLY);
+      this.pvLen = new Int32Array(MAX_PLY + 1);
+    }
+
+    now() { return (typeof performance !== "undefined" ? performance : Date).now(); }
+
+    ttStore(depth, flag, score, move, ply) {
+      const pos = this.pos, i = pos.lo & TT_MASK;
+      if (score > MATE - 1000) score += ply; else if (score < -MATE + 1000) score -= ply;
+      this.ttLo[i] = pos.lo; this.ttHi[i] = pos.hi; this.ttMove[i] = move;
+      this.ttScore[i] = score; this.ttDepth[i] = depth; this.ttFlag[i] = flag;
+    }
+
+    scoreMoves(base, end, ttMove, ply) {
+      const b = this.pos.board, mv = this.moves, sc = this.scores;
+      const k1 = this.killers[ply * 2], k2 = this.killers[ply * 2 + 1];
+      for (let i = base; i < end; i++) {
+        const m = mv[i];
+        if (m === ttMove) { sc[i] = 10000000; continue; }
+        const victim = (m >> 17) & F_EP ? P : Math.abs(b[(m >> 7) & 127]);
+        const promo = (m >> 14) & 7;
+        if (victim || promo) sc[i] = 1000000 + SEE_VAL[victim] * 10 - Math.abs(b[m & 127]) + (promo === Q ? 8000 : 0);
+        else if (m === k1) sc[i] = 900000;
+        else if (m === k2) sc[i] = 800000;
+        else sc[i] = this.history[(m & 127) * 128 + ((m >> 7) & 127)];
+      }
+    }
+
+    pickNext(i, end) {
+      const mv = this.moves, sc = this.scores;
+      let best = i;
+      for (let j = i + 1; j < end; j++) if (sc[j] > sc[best]) best = j;
+      if (best !== i) {
+        let t = mv[i]; mv[i] = mv[best]; mv[best] = t;
+        t = sc[i]; sc[i] = sc[best]; sc[best] = t;
+      }
+      return mv[i];
+    }
+
+    checkTime() {
+      if ((++this.nodes & 2047) === 0 && this.now() > this.deadline) this.stop = true;
+    }
+
+    qsearch(alpha, beta, ply) {
+      this.checkTime();
+      if (this.stop) return 0;
+      const pos = this.pos;
+      this.pvLen[ply] = 0;
+      if (ply >= MAX_PLY - 1) return pos.evaluate();
+      const inCheck = pos.inCheck();
+      let best = -INF, stand = 0;
+      if (!inCheck) {
+        stand = pos.evaluate();
+        if (stand >= beta) return stand;
+        if (stand > alpha) alpha = stand;
+        best = stand;
+      }
+      const base = ply * 256;
+      const end = pos.gen(this.moves, base, !inCheck);
+      this.scoreMoves(base, end, 0, ply);
+      let legal = 0;
+      for (let i = base; i < end; i++) {
+        const m = this.pickNext(i, end);
+        if (!inCheck && !((m >> 14) & 7)) {
+          // Delta pruning: skip captures that can't possibly raise alpha.
+          const victim = (m >> 17) & F_EP ? P : Math.abs(pos.board[(m >> 7) & 127]);
+          if (stand + SEE_VAL[victim] + 200 < alpha) continue;
+        }
+        if (!pos.make(m)) continue;
+        legal++;
+        const score = -this.qsearch(-beta, -alpha, ply + 1);
+        pos.unmake();
+        if (this.stop) return 0;
+        if (score > best) {
+          best = score;
+          if (score > alpha) {
+            alpha = score;
+            if (score >= beta) return score;
+          }
+        }
+      }
+      if (inCheck && legal === 0) return -MATE + ply;
+      return best;
+    }
+
+    search(depth, alpha, beta, ply, allowNull) {
+      this.checkTime();
+      if (this.stop) return 0;
+      const pos = this.pos;
+      this.pvLen[ply] = 0;
+      const pvNode = beta - alpha > 1;
+
+      if (ply > 0) {
+        if (pos.half >= 100 || pos.isRepetition() || pos.insufficientMaterial()) return 0;
+        if (alpha < -MATE + ply) alpha = -MATE + ply;
+        if (beta > MATE - ply - 1) beta = MATE - ply - 1;
+        if (alpha >= beta) return alpha;
+      }
+
+      const inCheck = pos.inCheck();
+      if (inCheck) depth++;
+      if (depth <= 0) return this.qsearch(alpha, beta, ply);
+      if (ply >= MAX_PLY - 1) return pos.evaluate();
+
+      // Transposition table probe
+      const ti = pos.lo & TT_MASK;
+      let ttMove = 0;
+      if (this.ttLo[ti] === pos.lo && this.ttHi[ti] === pos.hi) {
+        ttMove = this.ttMove[ti];
+        if (!pvNode && ply > 0 && this.ttDepth[ti] >= depth) {
+          let s = this.ttScore[ti];
+          if (s > MATE - 1000) s -= ply; else if (s < -MATE + 1000) s += ply;
+          const f = this.ttFlag[ti];
+          if (f === TT_EXACT || (f === TT_LOWER && s >= beta) || (f === TT_UPPER && s <= alpha)) return s;
+        }
+      }
+
+      if (!pvNode && !inCheck) {
+        const ev = pos.evaluate();
+        // Reverse futility pruning
+        if (depth <= 3 && ev - 120 * depth >= beta && Math.abs(beta) < MATE - 1000) return ev;
+        // Null-move pruning
+        if (allowNull && depth >= 3 && ev >= beta && pos.hasNonPawn(pos.side)) {
+          const r = 2 + (depth >= 6 ? 1 : 0);
+          pos.makeNull();
+          const s = -this.search(depth - 1 - r, -beta, -beta + 1, ply + 1, false);
+          pos.unmakeNull();
+          if (this.stop) return 0;
+          if (s >= beta) return s >= MATE - 1000 ? beta : s;
+        }
+      }
+
+      const base = ply * 256;
+      const end = pos.gen(this.moves, base, false);
+      this.scoreMoves(base, end, ttMove, ply);
+
+      const origAlpha = alpha;
+      let best = -INF, bestMove = 0, legal = 0;
+      for (let i = base; i < end; i++) {
+        const m = this.pickNext(i, end);
+        const quiet = !pos.board[(m >> 7) & 127] && !((m >> 17) & F_EP) && !((m >> 14) & 7);
+        if (!pos.make(m)) continue;
+        legal++;
+        const givesCheck = pos.inCheck();
+        let score;
+        if (legal === 1) {
+          score = -this.search(depth - 1, -beta, -alpha, ply + 1, true);
+        } else {
+          // Late move reductions for quiet, late moves
+          let r = 0;
+          if (depth >= 3 && legal > 3 && quiet && !inCheck && !givesCheck &&
+              m !== this.killers[ply * 2] && m !== this.killers[ply * 2 + 1]) {
+            r = legal > 8 ? 2 : 1;
+            if (pvNode) r--;
+          }
+          score = -this.search(depth - 1 - r, -alpha - 1, -alpha, ply + 1, true);
+          if (score > alpha && r > 0) score = -this.search(depth - 1, -alpha - 1, -alpha, ply + 1, true);
+          if (score > alpha && score < beta) score = -this.search(depth - 1, -beta, -alpha, ply + 1, true);
+        }
+        pos.unmake();
+        if (this.stop) return 0;
+
+        if (score > best) {
+          best = score; bestMove = m;
+          if (score > alpha) {
+            alpha = score;
+            // Update principal variation
+            const pv = this.pvTable, row = ply * MAX_PLY, next = (ply + 1) * MAX_PLY;
+            pv[row] = m;
+            const len = ply + 1 < MAX_PLY ? this.pvLen[ply + 1] : 0;
+            for (let j = 0; j < len; j++) pv[row + 1 + j] = pv[next + j];
+            this.pvLen[ply] = len + 1;
+            if (score >= beta) {
+              if (quiet) {
+                if (this.killers[ply * 2] !== m) {
+                  this.killers[ply * 2 + 1] = this.killers[ply * 2];
+                  this.killers[ply * 2] = m;
+                }
+                const h = (m & 127) * 128 + ((m >> 7) & 127);
+                this.history[h] += depth * depth;
+                if (this.history[h] > 700000) for (let j = 0; j < this.history.length; j++) this.history[j] >>= 1;
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      if (legal === 0) return inCheck ? -MATE + ply : 0;
+      this.ttStore(depth, best >= beta ? TT_LOWER : best > origAlpha ? TT_EXACT : TT_UPPER, best, bestMove, ply);
+      return best;
+    }
+
+    // Think for up to timeMs milliseconds. Calls onInfo after each completed depth.
+    think(timeMs, maxDepth, onInfo) {
+      const pos = this.pos;
+      const start = this.now();
+      this.deadline = start + timeMs;
+      this.stop = false;
+      this.nodes = 0;
+      this.killers.fill(0);
+      for (let j = 0; j < this.history.length; j++) this.history[j] >>= 2;
+
+      const legal = pos.legalMoves();
+      if (!legal.length) return { move: 0, score: pos.inCheck() ? -MATE : 0, depth: 0, pv: [] };
+      let result = { move: legal[0], score: 0, depth: 0, pv: [legal[0]] };
+      if (legal.length === 1) maxDepth = Math.min(maxDepth, 4);
+
+      for (let depth = 1; depth <= maxDepth && depth < MAX_PLY - 2; depth++) {
+        const score = this.search(depth, -INF, INF, 0, false);
+        if (this.stop && depth > 1) break;
+        const pv = Array.from(this.pvTable.subarray(0, this.pvLen[0]));
+        if (pv.length) result = { move: pv[0], score, depth, pv };
+        const elapsed = this.now() - start;
+        if (onInfo) onInfo({ depth, score, nodes: this.nodes, time: Math.round(elapsed), pv: pv.slice() });
+        if (Math.abs(score) > MATE - 100) break;          // found a forced mate
+        if (elapsed > timeMs * 0.55) break;               // next depth won't finish
+      }
+      result.nodes = this.nodes;
+      result.time = Math.round(this.now() - start);
+      return result;
+    }
+  }
+
+  return { Position, Searcher, MATE, sqName, parseSq, mFrom, mTo, mPromo, mFlags, F_CASTLE, F_EP };
+})();
+</script>
+
+<!-- Worker glue: runs the Robot's search off the main thread. -->
+<script id="worker-glue" type="text/plain">
+const pos = new Engine.Position();
+const searcher = new Engine.Searcher(pos);
+onmessage = function (e) {
+  const d = e.data;
+  if (d.cmd !== "go") return;
+  pos.setFen(d.fen);
+  for (const u of d.moves) {
+    const m = pos.uciToMove(u);
+    if (!m || !pos.make(m)) break;
+  }
+  const sanPv = pv => {
+    const out = [];
+    for (const m of pv) { if (!pos.legalMoves().includes(m)) break; out.push(pos.san(m)); pos.make(m); }
+    for (let i = 0; i < out.length; i++) pos.unmake();
+    return out;
+  };
+  const r = searcher.think(d.time, d.depth || 64, info => {
+    postMessage({ type: "info", id: d.id, depth: info.depth, score: info.score, nodes: info.nodes,
+                  time: info.time, pv: sanPv(info.pv) });
+  });
+  postMessage({ type: "bestmove", id: d.id, move: r.move ? pos.moveToUci(r.move) : null,
+                score: r.score, depth: r.depth, nodes: r.nodes, time: r.time });
+};
+</script>
+
+<!-- ===================================================================
+     UI + game controller
+     =================================================================== -->
+<script>
+"use strict";
+(function () {
+  const { Position, MATE, sqName, mFrom, mTo, mPromo } = Engine;
+  const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  const GLYPH = { 1: "♟", 2: "♞", 3: "♝", 4: "♜", 5: "♛", 6: "♚" };
+  const $ = id => document.getElementById(id);
+
+  // ---------------- Robot worker ----------------
+  const robotSrc = $("engine-src").textContent + "\n" + $("worker-glue").textContent;
+  const robot = new Worker(URL.createObjectURL(new Blob([robotSrc], { type: "text/javascript" })));
+  let robotReqId = 0;
+  const robotPending = new Map();
+  robot.onmessage = e => {
+    const d = e.data, req = robotPending.get(d.id);
+    if (!req) return;
+    if (d.type === "info") req.onInfo && req.onInfo(d);
+    else { robotPending.delete(d.id); req.resolve(d); }
+  };
+  function robotThink(moves, time, onInfo) {
+    return new Promise(resolve => {
+      const id = ++robotReqId;
+      robotPending.set(id, { resolve, onInfo });
+      robot.postMessage({ cmd: "go", id, fen: START_FEN, moves, time });
+    });
+  }
+
+  // ---------------- Stockfish worker ----------------
+  // Tries a local copy first (put stockfish.js next to this file to play offline), then CDNs.
+  const SF_URLS = [
+    new URL("stockfish.js", location.href).href,
+    "https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js",
+    "https://unpkg.com/stockfish.js@10.0.2/stockfish.js",
+  ];
+  let sf = null, sfReady = false, sfListener = null;
+  const sfReadyWaiters = [];
+  function startStockfish() {
+    const src = "var __urls=" + JSON.stringify(SF_URLS) + ";var __ok=false;" +
+      "for(var i=0;i<__urls.length&&!__ok;i++){try{importScripts(__urls[i]);__ok=true;}catch(e){}}" +
+      "if(!__ok){postMessage('__sf_failed__');}";
+    try {
+      sf = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+    } catch (err) { sfFailed(); return; }
+    sf.onmessage = e => {
+      const line = typeof e.data === "string" ? e.data : String(e.data);
+      if (line === "__sf_failed__") { sfFailed(); return; }
+      if (line === "uciok") { sf.postMessage("isready"); return; }
+      if (line === "readyok" && !sfReady) {
+        sfReady = true;
+        $("sfState").textContent = "Stockfish: ready ✓";
+        sfReadyWaiters.splice(0).forEach(f => f());
+        return;
+      }
+      if (sfListener) sfListener(line);
+    };
+    sf.onerror = () => sfFailed();
+    sf.postMessage("uci");
+  }
+  function sfFailed() {
+    $("sfState").textContent = "Stockfish: could not load (needs internet, or put stockfish.js next to this page).";
+  }
+  function whenSfReady() { return sfReady ? Promise.resolve() : new Promise(r => sfReadyWaiters.push(r)); }
+
+  async function stockfishThink(moves, time, skill, onInfo) {
+    await whenSfReady();
+    return new Promise(resolve => {
+      sfListener = line => {
+        if (line.startsWith("info") && line.includes(" pv ")) {
+          const depth = +(line.match(/ depth (\d+)/) || [])[1];
+          const cp = line.match(/ score cp (-?\d+)/), mate = line.match(/ score mate (-?\d+)/);
+          const pv = line.split(" pv ")[1].trim().split(" ");
+          onInfo && onInfo({ depth, cp: cp ? +cp[1] : null, mate: mate ? +mate[1] : null, pv });
+        } else if (line.startsWith("bestmove")) {
+          sfListener = null;
+          const mv = line.split(" ")[1];
+          resolve(mv && mv !== "(none)" ? mv : null);
+        }
+      };
+      sf.postMessage("setoption name Skill Level value " + skill);
+      sf.postMessage("position startpos" + (moves.length ? " moves " + moves.join(" ") : ""));
+      sf.postMessage("go movetime " + time);
+    });
+  }
+
+  // ---------------- Game state ----------------
+  const game = new Position();
+  let uciMoves = [], sanMoves = [];
+  let players = { 0: "robot", 1: "stockfish" };
+  let gameId = 0, paused = false, over = false, busy = false;
+  let flipped = false, selected = -1, hintMove = null, pendingPromo = null;
+  let lastRobotEval = 0;
+  const tally = { win: 0, draw: 0, loss: 0 };
+
+  function playerName(t) { return t === "robot" ? "Robot" : t === "stockfish" ? "Stockfish" : "You"; }
+
+  // ---------------- Rendering ----------------
+  const boardEl = $("board");
+  const squares = [];
+  for (let i = 0; i < 64; i++) {
+    const el = document.createElement("div");
+    el.addEventListener("click", () => onSquareClick(el._sq));
+    boardEl.appendChild(el);
+    squares.push(el);
+  }
+
+  function render() {
+    const legal = selected >= 0 ? game.legalMoves().filter(m => mFrom(m) === selected) : [];
+    const last = game.sp ? game.uMove[game.sp - 1] : 0;
+    const checkSq = game.inCheck() ? game.kingSq[game.side] : -1;
+    for (let i = 0; i < 64; i++) {
+      const row = Math.floor(i / 8), col = i % 8;
+      const r = flipped ? row : 7 - row, f = flipped ? 7 - col : col;
+      const sq = r * 16 + f, el = squares[i];
+      el._sq = sq;
+      let cls = "sq " + ((r + f) % 2 ? "light" : "dark");
+      if (last && (mFrom(last) === sq || mTo(last) === sq)) cls += " last";
+      if (hintMove && (hintMove.from === sq || hintMove.to === sq)) cls += " hint";
+      if (sq === selected) cls += " sel";
+      if (sq === checkSq) cls += " check";
+      el.className = cls;
+      let html = "";
+      const p = game.board[sq];
+      if (p) html += `<span class="piece ${p > 0 ? "w" : "b"}">${GLYPH[Math.abs(p)]}</span>`;
+      if (legal.some(m => mTo(m) === sq)) html += p ? '<span class="ring"></span>' : '<span class="dot"></span>';
+      if (row === 7) html += `<span class="coord file">${"abcdefgh"[f]}</span>`;
+      if (col === 0) html += `<span class="coord rank">${r + 1}</span>`;
+      el.innerHTML = html;
+    }
+    $("topName").textContent = (flipped ? "White: " : "Black: ") + playerName(players[flipped ? 0 : 1]);
+    $("bottomName").textContent = (flipped ? "Black: " : "White: ") + playerName(players[flipped ? 1 : 0]);
+    renderMoves();
+  }
+
+  function renderMoves() {
+    const el = $("moves");
+    let html = "";
+    for (let i = 0; i < sanMoves.length; i += 2) {
+      html += `<span class="n">${i / 2 + 1}.</span>`;
+      html += `<span class="${i === sanMoves.length - 1 ? "cur" : ""}">${sanMoves[i]}</span>`;
+      html += `<span class="${i + 1 === sanMoves.length - 1 ? "cur" : ""}">${sanMoves[i + 1] || ""}</span>`;
+    }
+    el.innerHTML = html;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function fmtScore(cp) {
+    if (Math.abs(cp) > MATE - 200) {
+      const plies = MATE - Math.abs(cp), moves = Math.ceil(plies / 2);
+      return (cp > 0 ? "#" : "#-") + moves;
+    }
+    return (cp >= 0 ? "+" : "") + (cp / 100).toFixed(2);
+  }
+
+  function setEvalBar(whiteCp) {
+    let pct;
+    if (Math.abs(whiteCp) > MATE - 200) pct = whiteCp > 0 ? 100 : 0;
+    else pct = 50 + 50 * (2 / (1 + Math.exp(-whiteCp / 300)) - 1);
+    $("evalFill").style.width = pct.toFixed(1) + "%";
+    $("evalText").textContent = "Robot's eval (white's view): " + fmtScore(whiteCp);
+  }
+
+  function setStatus(t) { $("status").textContent = t; }
+
+  // ---------------- Game flow ----------------
+  function gameResult() {
+    const moves = game.legalMoves();
+    if (!moves.length) {
+      if (game.inCheck()) return { winner: game.side ^ 1, reason: "checkmate" };
+      return { winner: -1, reason: "stalemate" };
+    }
+    if (game.half >= 100) return { winner: -1, reason: "50-move rule" };
+    if (game.repetitionCount() >= 3) return { winner: -1, reason: "threefold repetition" };
+    if (game.insufficientMaterial()) return { winner: -1, reason: "insufficient material" };
+    return null;
+  }
+
+  function applyMove(m) {
+    sanMoves.push(game.san(m));
+    uciMoves.push(game.moveToUci(m));
+    game.make(m);
+    selected = -1; hintMove = null;
+    render();
+  }
+
+  function finishGame(res) {
+    over = true;
+    const txt = res.winner === -1 ? "Draw — " + res.reason
+      : `${res.winner === 0 ? "White" : "Black"} (${playerName(players[res.winner])}) wins by ${res.reason}`;
+    setStatus("Game over: " + txt);
+    const types = [players[0], players[1]];
+    if (types.includes("robot") && types.includes("stockfish")) {
+      if (res.winner === -1) tally.draw++;
+      else if (players[res.winner] === "robot") tally.win++;
+      else tally.loss++;
+      $("sWin").textContent = tally.win; $("sDraw").textContent = tally.draw; $("sLoss").textContent = tally.loss;
+      if ($("autoNext").checked) {
+        setTimeout(() => {
+          if (!over) return;
+          const w = $("whiteSel").value;
+          $("whiteSel").value = $("blackSel").value; $("blackSel").value = w;
+          newGame();
+        }, 2500);
+      }
+    }
+  }
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  async function step() {
+    if (over || paused || busy) return;
+    const res = gameResult();
+    if (res) { finishGame(res); return; }
+    const who = players[game.side], myId = gameId;
+    const sideName = game.side === 0 ? "White" : "Black";
+    if (who === "human") { setStatus(`${sideName} to move — your turn`); return; }
+
+    busy = true;
+    setStatus(`${sideName} (${playerName(who)}) is thinking…`);
+    const t0 = performance.now();
+    let uci = null;
+    try {
+      if (who === "robot") {
+        const time = Math.max(100, +$("robotTime").value || 1500);
+        const side = game.side;
+        const r = await robotThink(uciMoves.slice(), time, info => {
+          if (myId !== gameId) return;
+          const whiteCp = side === 0 ? info.score : -info.score;
+          $("robotAnalysis").innerHTML =
+            `<b>depth ${info.depth}</b> · eval ${fmtScore(whiteCp)} · ${(info.nodes / 1000).toFixed(0)}k nodes · ${info.time} ms<br>` +
+            `best line: ${info.pv.join(" ")}`;
+          lastRobotEval = whiteCp;
+          setEvalBar(whiteCp);
+        });
+        uci = r.move;
+      } else {
+        const time = Math.max(50, +$("sfTime").value || 500);
+        const skill = +$("sfSkill").value;
+        const side = game.side;
+        uci = await stockfishThink(uciMoves.slice(), time, skill, info => {
+          if (myId !== gameId) return;
+          let s;
+          if (info.mate !== null) s = (side === 0 ? info.mate : -info.mate) > 0 ? "#" + Math.abs(info.mate) : "#-" + Math.abs(info.mate);
+          else s = fmtScore(side === 0 ? info.cp : -info.cp);
+          $("sfAnalysis").innerHTML = `<b>depth ${info.depth}</b> · eval ${s} (skill ${skill})<br>best line: ${info.pv.slice(0, 10).join(" ")}`;
+        });
+      }
+    } finally { busy = false; }
+    if (myId !== gameId) return;          // a new game started meanwhile
+    const delay = Math.max(0, +$("moveDelay").value || 0) - (performance.now() - t0);
+    if (delay > 0) await sleep(delay);
+    if (myId !== gameId) return;
+    const m = uci ? game.uciToMove(uci) : 0;
+    if (!m) { setStatus(`${playerName(who)} returned no legal move.`); return; }
+    applyMove(m);
+    if (paused) { setStatus("Paused"); return; }
+    step();
+  }
+
+  function newGame() {
+    gameId++;
+    busy = false; over = false; paused = false;
+    $("pauseBtn").textContent = "Pause";
+    players = { 0: $("whiteSel").value, 1: $("blackSel").value };
+    game.setFen(START_FEN);
+    uciMoves = []; sanMoves = []; selected = -1; hintMove = null;
+    if (sf && sfReady) sf.postMessage("ucinewgame");
+    // Show a human player's pieces at the bottom.
+    if (players[1] === "human" && players[0] !== "human") flipped = true;
+    else if (players[0] === "human") flipped = false;
+    $("robotAnalysis").textContent = "Waiting…";
+    $("sfAnalysis").textContent = "Waiting…";
+    setEvalBar(0);
+    render();
+    step();
+  }
+
+  // ---------------- Human input ----------------
+  function onSquareClick(sq) {
+    if (over || busy || players[game.side] !== "human" || pendingPromo) return;
+    const p = game.board[sq];
+    const own = p && (p > 0) === (game.side === 0);
+    if (selected >= 0) {
+      const cands = game.legalMoves().filter(m => mFrom(m) === selected && mTo(m) === sq);
+      if (cands.length === 1) { applyMove(cands[0]); step(); return; }
+      if (cands.length > 1) { askPromotion(cands); return; }
+    }
+    selected = own ? sq : -1;
+    render();
+  }
+
+  function askPromotion(cands) {
+    pendingPromo = cands;
+    const box = $("promoChoices");
+    box.innerHTML = "";
+    const color = game.side === 0 ? "w" : "b";
+    for (const t of [5, 4, 3, 2]) {
+      const btn = document.createElement("button");
+      btn.innerHTML = `<span class="piece ${color}" style="font-size:44px">${GLYPH[t]}</span>`;
+      btn.onclick = () => {
+        $("promo").classList.remove("show");
+        pendingPromo = null;
+        const m = cands.find(c => mPromo(c) === t);
+        applyMove(m); step();
+      };
+      box.appendChild(btn);
+    }
+    $("promo").classList.add("show");
+  }
+
+  // ---------------- Buttons ----------------
+  $("newBtn").onclick = newGame;
+  $("flipBtn").onclick = () => { flipped = !flipped; render(); };
+  $("pauseBtn").onclick = () => {
+    if (over) return;
+    paused = !paused;
+    $("pauseBtn").textContent = paused ? "Resume" : "Pause";
+    if (paused) { if (!busy) setStatus("Paused"); else setStatus("Pausing after this move…"); }
+    else step();
+  };
+  $("undoBtn").onclick = () => {
+    if (busy || !game.sp) return;
+    const hasHuman = players[0] === "human" || players[1] === "human";
+    if (!hasHuman) { setStatus("Undo is for games where you play."); return; }
+    gameId++;
+    do {
+      game.unmake(); uciMoves.pop(); sanMoves.pop();
+    } while (game.sp && players[game.side] !== "human");
+    over = false; selected = -1; hintMove = null;
+    render(); step();
+  };
+  $("hintBtn").onclick = async () => {
+    if (busy || over) return;
+    setStatus("Robot is analyzing the position for you…");
+    const myId = gameId, side = game.side;
+    busy = true;
+    const r = await robotThink(uciMoves.slice(), Math.max(300, +$("robotTime").value || 1500), info => {
+      const whiteCp = side === 0 ? info.score : -info.score;
+      $("robotAnalysis").innerHTML = `<b>depth ${info.depth}</b> · eval ${fmtScore(whiteCp)} · ${(info.nodes / 1000).toFixed(0)}k nodes<br>best line: ${info.pv.join(" ")}`;
+      setEvalBar(whiteCp);
+    });
+    busy = false;
+    if (myId !== gameId || !r.move) return;
+    const m = game.uciToMove(r.move);
+    hintMove = { from: mFrom(m), to: mTo(m) };
+    render();
+    setStatus(`Robot suggests ${game.san(m)} (${fmtScore(side === 0 ? r.score : -r.score)}, depth ${r.depth})`);
+    if (players[game.side] !== "human") step();
+  };
+  $("sfSkill").oninput = () => { $("skillVal").textContent = $("sfSkill").value; };
+  $("copyFen").onclick = () => navigator.clipboard && navigator.clipboard.writeText(game.fen());
+  $("copyPgn").onclick = () => {
+    let pgn = `[White "${playerName(players[0])}"]\n[Black "${playerName(players[1])}"]\n\n`;
+    for (let i = 0; i < sanMoves.length; i++) pgn += (i % 2 === 0 ? (i / 2 + 1) + ". " : "") + sanMoves[i] + " ";
+    navigator.clipboard && navigator.clipboard.writeText(pgn.trim());
+  };
+
+  // Expose for debugging / tests.
+  window.chessApp = { game, get uciMoves() { return uciMoves; }, get over() { return over; }, newGame };
+
+  startStockfish();
+  newGame();
+})();
+</script>
+</body>
+</html>
